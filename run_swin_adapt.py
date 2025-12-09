@@ -105,17 +105,6 @@ def dynamic_weight_adaption(current):
     clipped_weight = np.clip(weight, args.min_clip, args.max_clip)
     return clipped_weight
 
-
-def get_bandwidth(args, bw):
-    H, W = args.image_dims
-    num_patches = (H // 16) * (W // 16)
-    num_features = num_patches * bw * args.unit_trans_feat
-    fps = 30
-    bytes_per_sec = num_features * 4 * fps
-    mb_per_sec = bytes_per_sec / (1024 * 1024)
-    return mb_per_sec
-
-
 def train_epoch(loader, model, solvers, weight):
 
     model.train()
@@ -131,15 +120,11 @@ def train_epoch(loader, model, solvers, weight):
             bw = np.random.randint(args.min_trans_feat, args.max_trans_feat+1)
             output = model(images, bw)
 
-            # Calculate bandwidth
-            bandwidth_mbs = get_bandwidth(args, bw)
-
             loss = nn.MSELoss()(output, images)* weight[bw-args.min_trans_feat]
             loss.backward()
             solvers.step()
 
             epoch_postfix['l2_loss'] = '{:.4f}'.format(loss.item())
-            epoch_postfix['bw_mbs'] = '{:.4f}'.format(bandwidth_mbs)
 
             tepoch.set_postfix(**epoch_postfix)
 
@@ -165,11 +150,7 @@ def validate_epoch(loader, model, bw = args.trg_trans_feat, disable = False):
                 
                 loss = nn.MSELoss()(output, images)
 
-                # Calculate bandwidth
-                bandwidth_mbs = get_bandwidth(args, bw)
-
                 epoch_postfix['l2_loss'] = '{:.4f}'.format(loss.item())
-                epoch_postfix['bw_mbs'] = '{:.4f}'.format(bandwidth_mbs)
 
                 ######  Predictions  ######
                 predictions = torch.chunk(output, chunks=output.size(0), dim=0)
@@ -212,8 +193,7 @@ def validate_epoch(loader, model, bw = args.trg_trans_feat, disable = False):
                             'predictions': predictions,
                             'target': target,
                             'psnr_std': psnr_std,
-                            'ssim_std': ssim_std,
-                            'bw_mbs': get_bandwidth(args, bw)}
+                            'ssim_std': ssim_std}
 
         
     return loss_mean, return_aux
@@ -236,7 +216,7 @@ if __name__ == '__main__':
 
         writter.add_scalar('loss', valid_loss, epoch)
         writter.add_scalar('psnr', valid_aux['psnr'], epoch)
-        writter.add_scalar('bw_mbs', valid_aux['bw_mbs'], epoch)
+
 
         if epoch % args.freq == 0:
             current_psnr = np.array([0.0 for _ in range(args.min_trans_feat, args.max_trans_feat+1)])
@@ -288,7 +268,6 @@ if __name__ == '__main__':
         jscc_model.trg_trans_feat = tgt_trans_feat
         #args.link_qual = link_qual
         _, eval_aux = validate_epoch(eval_loader, jscc_model, bw = tgt_trans_feat)
-        print(f"Bandwidth: {eval_aux['bw_mbs']:.4f} MB/s")
         print(eval_aux['psnr'])
         print(eval_aux['ssim'])
         #print(eval_aux['power'])
