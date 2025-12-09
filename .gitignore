@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+
+# Training and Inference Outputs
+runs/
+inference_results/
+inference_results_hd/
+
+# Datasets and Models
+datasets/
+models/
+
+# IDE
+.idea/
+
